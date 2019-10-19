@@ -41,7 +41,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
      * the {@link SelectorProvider} which is returned by {@link SelectorProvider#provider()}.
      */
     public NioEventLoopGroup() {
-        this(0);
+        this(0); // 这里传入0， 默认使用cpu逻辑核数的2倍来初始化NioEventLoop池
     }
 
     /**
@@ -131,9 +131,11 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
         }
     }
 
+    // 创建NioEventLoops
     @Override
     protected EventLoop newChild(Executor executor, Object... args) throws Exception {
         EventLoopTaskQueueFactory queueFactory = args.length == 4 ? (EventLoopTaskQueueFactory) args[3] : null;
+        // 创建NioEventLoop对象
         return new NioEventLoop(this, executor, (SelectorProvider) args[0],
             ((SelectStrategyFactory) args[1]).newSelectStrategy(), (RejectedExecutionHandler) args[2], queueFactory);
     }

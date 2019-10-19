@@ -94,6 +94,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         succeededFuture = new SucceededChannelFuture(channel, null);
         voidPromise =  new VoidChannelPromise(channel, true);
 
+        // 创建了首尾节点，形成了双向链表
         tail = new TailContext(this);
         head = new HeadContext(this);
 
@@ -201,6 +202,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         synchronized (this) {
             checkMultiplicity(handler);
 
+            // 将ChannelHandler包装为ChannelHandlerContext
             newCtx = newContext(group, filterName(name, handler), handler);
 
             addLast0(newCtx);
@@ -209,8 +211,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
             if (!registered) {
-                newCtx.setAddPending();
-                callHandlerCallbackLater(newCtx, true);
+                newCtx.setAddPending(); // 设置ctx的状态为ADD_Pending
+                callHandlerCallbackLater(newCtx, true); // 稍后调用handlerAdded方法
                 return this;
             }
 
@@ -220,10 +222,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 return this;
             }
         }
-        callHandlerAdded0(newCtx);
+        callHandlerAdded0(newCtx); // 调用ChannelInitializer的handlerAdd
         return this;
     }
 
+    // 将handler加入到pipline tail之前一个节点
     private void addLast0(AbstractChannelHandlerContext newCtx) {
         AbstractChannelHandlerContext prev = tail.prev;
         newCtx.prev = prev;
@@ -416,8 +419,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return StringUtil.simpleClassName(handlerType) + "#0";
     }
 
+    // 删除handler
     @Override
-    public final ChannelPipeline remove(ChannelHandler handler) {
+    public final ChannelPipeline remove(ChannelHandler handler) { // 移除handler
         remove(getContextOrDie(handler));
         return this;
     }
@@ -484,6 +488,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     /**
      * Method is synchronized to make the handler removal from the double linked list atomic.
+     * 从pipline中移除handler，实质就是断链
      */
     private synchronized void atomicRemoveFromHandlerList(AbstractChannelHandlerContext ctx) {
         AbstractChannelHandlerContext prev = ctx.prev;
@@ -1106,13 +1111,14 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    // 开始执行PendingHandlerCallback task链
     private void callHandlerAddedForAllHandlers() {
         final PendingHandlerCallback pendingHandlerCallbackHead;
         synchronized (this) {
             assert !registered;
 
             // This Channel itself was registered.
-            registered = true;
+            registered = true; // 设置NioServerSocketChannel已经注册了。
 
             pendingHandlerCallbackHead = this.pendingHandlerCallbackHead;
             // Null out so it can be GC'ed.
@@ -1130,8 +1136,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private void callHandlerCallbackLater(AbstractChannelHandlerContext ctx, boolean added) {
-        assert !registered;
+        assert !registered; // 保证channel没有和eventloop绑定
 
+        // 应该也是采用了责任链的设计模式，pendingtask 也形成了一条执行链
         PendingHandlerCallback task = added ? new PendingHandlerAddedTask(ctx) : new PendingHandlerRemovedTask(ctx);
         PendingHandlerCallback pending = pendingHandlerCallbackHead;
         if (pending == null) {
@@ -1314,6 +1321,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    // HeadContext, 也就是所有执行ChannelHandlerContext的源，所有的ChannelInboundHandler都是从此
+    // 开始，顺序执行pipeline中的ChannelInboundHandler
+    // 对于ChannelOutboundHandler，HeadContext是最后一站。
     final class HeadContext extends AbstractChannelHandlerContext
             implements ChannelOutboundHandler, ChannelInboundHandler {
 
@@ -1390,8 +1400,8 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
 
         @Override
-        public void channelRegistered(ChannelHandlerContext ctx) {
-            invokeHandlerAddedIfNeeded();
+        public void channelRegistered(ChannelHandlerContext ctx) { // 当channel注册之后，会调用该方法
+            invokeHandlerAddedIfNeeded(); // 这里会执行之前pipeline在addLast中添加的所有pending task
             ctx.fireChannelRegistered();
         }
 
@@ -1457,6 +1467,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         abstract void execute();
     }
 
+    //
     private final class PendingHandlerAddedTask extends PendingHandlerCallback {
 
         PendingHandlerAddedTask(AbstractChannelHandlerContext ctx) {

@@ -71,6 +71,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         this.parent = parent;
         id = newId();
         unsafe = newUnsafe();
+
+        // 创建pipeline: DefaultChannelPipeline
         pipeline = newChannelPipeline();
     }
 
@@ -104,7 +106,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      * Returns a new {@link DefaultChannelPipeline} instance.
      */
     protected DefaultChannelPipeline newChannelPipeline() {
-        return new DefaultChannelPipeline(this);
+        return new DefaultChannelPipeline(this); // this -> channel
     }
 
     @Override
@@ -463,6 +465,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            //这里实现了eventLoop和channel的绑定
             AbstractChannel.this.eventLoop = eventLoop;
 
             if (eventLoop.inEventLoop()) {

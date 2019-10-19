@@ -102,7 +102,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     private final ChannelFutureListener writeListener = new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
-            lastWriteTime = ticksInNanos();
+            lastWriteTime = ticksInNanos(); // 这里设置lastWriteTime
             firstWriterIdleEvent = firstAllIdleEvent = true;
         }
     };
@@ -187,6 +187,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
      *        the {@link TimeUnit} of {@code readerIdleTime},
      *        {@code writeIdleTime}, and {@code allIdleTime}
      */
+    // 创建IdleHandler实例，所做的工作就是将时间转换为纳秒
     public IdleStateHandler(boolean observeOutput,
             long readerIdleTime, long writerIdleTime, long allIdleTime,
             TimeUnit unit) {
@@ -194,7 +195,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             throw new NullPointerException("unit");
         }
 
-        this.observeOutput = observeOutput;
+        this.observeOutput = observeOutput; // 默认
 
         if (readerIdleTime <= 0) {
             readerIdleTimeNanos = 0;
@@ -238,7 +239,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     }
 
     @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception { // 表示handler添加成功后，调用该方法。
         if (ctx.channel().isActive() && ctx.channel().isRegistered()) {
             // channelActive() event has been fired already, which means this.channelActive() will
             // not be invoked. We have to initialize here instead.
@@ -257,7 +258,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
         // Initialize early if channel is active already.
-        if (ctx.channel().isActive()) {
+        if (ctx.channel().isActive()) { // 当channel激活时
             initialize(ctx);
         }
         super.channelRegistered(ctx);
@@ -281,8 +282,8 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (readerIdleTimeNanos > 0 || allIdleTimeNanos > 0) {
-            reading = true;
-            firstReaderIdleEvent = firstAllIdleEvent = true;
+            reading = true; // 这里设置为true
+            firstReaderIdleEvent = firstAllIdleEvent = true; // 如果是第一次读idle事件。
         }
         ctx.fireChannelRead(msg);
     }
@@ -306,6 +307,10 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
     }
 
+    /**
+     * 当handler注册时，调用该方法
+     * @param ctx
+     */
     private void initialize(ChannelHandlerContext ctx) {
         // Avoid the case where destroy() is called before scheduling timeouts.
         // See: https://github.com/netty/netty/issues/143
@@ -318,6 +323,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         state = 1;
         initOutputChanged(ctx);
 
+        // 注意：最后读写时间都是系统纳秒时间
         lastReadTime = lastWriteTime = ticksInNanos();
         if (readerIdleTimeNanos > 0) {
             readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx),
@@ -369,6 +375,8 @@ public class IdleStateHandler extends ChannelDuplexHandler {
      * {@link ChannelHandlerContext#fireUserEventTriggered(Object)}.
      */
     protected void channelIdle(ChannelHandlerContext ctx, IdleStateEvent evt) throws Exception {
+
+        // 调用下一个handler的userEventTriggered方法
         ctx.fireUserEventTriggered(evt);
     }
 
@@ -480,6 +488,9 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         protected abstract void run(ChannelHandlerContext ctx);
     }
 
+    /**
+     * 读空闲超时任务
+     */
     private final class ReaderIdleTimeoutTask extends AbstractIdleTask {
 
         ReaderIdleTimeoutTask(ChannelHandlerContext ctx) {
@@ -488,25 +499,35 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
         @Override
         protected void run(ChannelHandlerContext ctx) {
+
+            // 将下一个读空闲超时时间设置为nextDelay
             long nextDelay = readerIdleTimeNanos;
-            if (!reading) {
+            if (!reading) { // 如果reading = true, 表示有数据写入，直接进入下一个超时检测
+                // 计算下一次读空闲超时时间，nextDelay = nextDelay - (ticksInNanos() - lastReadTime),
+                // 如果nextDelay > 0 表示读空闲未超时
+                // 否则超时。
                 nextDelay -= ticksInNanos() - lastReadTime;
             }
 
-            if (nextDelay <= 0) {
+            if (nextDelay <= 0) { // 表示读空闲已超时
                 // Reader is idle - set a new timeout and notify the callback.
+                // 接着下一次读空闲超时检测
                 readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
 
+                //
                 boolean first = firstReaderIdleEvent;
                 firstReaderIdleEvent = false;
 
                 try {
+                    // 创建ReadIdleStateEvent事件
                     IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
+
+                    // 调用userTriggerEvent回调方法
                     channelIdle(ctx, event);
                 } catch (Throwable t) {
                     ctx.fireExceptionCaught(t);
                 }
-            } else {
+            } else { // 表示未超时，继续使用nextDelay 定时指定超时检测
                 // Read occurred before the timeout - set a new timeout with shorter delay.
                 readerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
             }
@@ -561,7 +582,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             if (!reading) {
                 nextDelay -= ticksInNanos() - Math.max(lastReadTime, lastWriteTime);
             }
-            if (nextDelay <= 0) {
+            if (nextDelay <= 0) { // 只有读和写都idle时，才触发all idle事件
                 // Both reader and writer are idle - set a new timeout and
                 // notify the callback.
                 allIdleTimeout = schedule(ctx, this, allIdleTimeNanos, TimeUnit.NANOSECONDS);

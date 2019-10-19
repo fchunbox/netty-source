@@ -103,13 +103,14 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
      * {@inheritDoc} If override this method ensure you call super!
      */
     @Override
+    // 当handler成功添加到pipeline中，调用该方法
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
         if (ctx.channel().isRegistered()) {
             // This should always be true with our current DefaultChannelPipeline implementation.
             // The good thing about calling initChannel(...) in handlerAdded(...) is that there will be no ordering
             // surprises if a ChannelInitializer will add another ChannelInitializer. This is as all handlers
             // will be added in the expected order.
-            if (initChannel(ctx)) {
+            if (initChannel(ctx)) { // 初始化channel
 
                 // We are done with init the Channel, removing the initializer now.
                 removeState(ctx);
@@ -134,7 +135,7 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
             } finally {
                 ChannelPipeline pipeline = ctx.pipeline();
                 if (pipeline.context(this) != null) {
-                    pipeline.remove(this);
+                    pipeline.remove(this); // 将该handler移除
                 }
             }
             return true;

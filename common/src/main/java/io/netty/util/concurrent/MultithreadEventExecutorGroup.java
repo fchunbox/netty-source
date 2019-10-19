@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
 
+    // 这就是EventLoopGroup名称的由来，就是一组EventExecutor, 数组大小默认为： cpu逻辑核数的2倍。
     private final EventExecutor[] children;
     private final Set<EventExecutor> readonlyChildren;
     private final AtomicInteger terminatedChildren = new AtomicInteger();
@@ -68,20 +69,25 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
-        if (nThreads <= 0) {
+        if (nThreads <= 0) { // 此时nThreads != 0
             throw new IllegalArgumentException(String.format("nThreads: %d (expected: > 0)", nThreads));
         }
 
-        if (executor == null) {
+        if (executor == null) { // executor 为空
+            // 创建executor， 使用默
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
-        children = new EventExecutor[nThreads];
+        // 创建EventLoop数组，EventLoop就是EventExecutor， NioEventLoopGriup -> NioEventLoop(EventExecutor)
+        // 也就是说：NioEventLoop就是事件执行器。
+        children = new EventExecutor[nThreads]; // EventLoopGroup包含了一组EventLoop(EventExecutor)
 
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
-                children[i] = newChild(executor, args);
+
+                // 初始化创建NioEventLoop对象。相当于是一个NioEventLoop池
+                children[i] = newChild(executor, args); // 注意executor，会设置到每一个NioEventLoop中
                 success = true;
             } catch (Exception e) {
                 // TODO: Think about if this is a good exception type

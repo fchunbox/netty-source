@@ -47,6 +47,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     private final Map<ChannelOption<?>, Object> childOptions = new ConcurrentHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
+
+    // 创建ServerBootstrapConfig对象
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
     private volatile EventLoopGroup childGroup;
     private volatile ChannelHandler childHandler;
@@ -122,19 +124,28 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     }
 
     @Override
-    void init(Channel channel) {
+    void init(Channel channel) { // 初始化channel
+        // 设置channle option
         setChannelOptions(channel, options0().entrySet().toArray(newOptionArray(0)), logger);
+
+        // 设置channel属性
         setAttributes(channel, attrs0().entrySet().toArray(newAttrArray(0)));
 
-        ChannelPipeline p = channel.pipeline();
+        // 获取pipeline
+        ChannelPipeline p = channel.pipeline(); // 也就是DefaultHandlerPipeline
 
+        // NioEventLoopGroup
         final EventLoopGroup currentChildGroup = childGroup;
+
+        // 处理请求的handler, 也就是注册的ChannelHandlerInitialier
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions =
                 childOptions.entrySet().toArray(newOptionArray(0));
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
 
-        p.addLast(new ChannelInitializer<Channel>() {
+        // 添加ChannelHandler，此时channel还没有注册，会将执行handlerAdded方法的任务，添加到pending 列表中
+        // 当channel注册之后，再执行
+        p.addLast(new ChannelInitializer<Channel>() { // 这里是最开始初始化channel的
             @Override
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
@@ -143,9 +154,11 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                     pipeline.addLast(handler);
                 }
 
+                // 这里eventloop是parent group中的
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
+                        // 在这里添加ChannelHandler，是parent group中的pipeline
                         pipeline.addLast(new ServerBootstrapAcceptor(
                                 ch, currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
                     }
@@ -198,15 +211,17 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
         @Override
         @SuppressWarnings("unchecked")
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
-            final Channel child = (Channel) msg;
+        public void channelRead(ChannelHandlerContext ctx, Object msg) { // 当有消息写入时，也就是有新的连接过来时，调用此方法
+            final Channel child = (Channel) msg; // 这里的message是channel
 
+            // 获取channel中的中的pipeline, 然后往新的channel中，添加用户定义的ChannelHandler，也就是bootstrap中注册的ChannelHandler
             child.pipeline().addLast(childHandler);
 
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
             try {
+                // 实现新channel和eventLoop的绑定
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
